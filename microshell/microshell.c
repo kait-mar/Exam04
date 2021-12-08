@@ -84,4 +84,5 @@ int main(int argc, char **argv, char **env)
         return (0);
     cmd = malloc(sizeof(t_lst));
     parse_error(argv[1], &cmd);
+    //this wouldn't compile, just put the general structure!
 }
