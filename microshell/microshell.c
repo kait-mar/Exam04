@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <string.h>
 
+
 typedef struct lst
 {
     char    *cmd;
@@ -13,6 +14,7 @@ typedef struct lst
     int         fd[2];
 }   t_lst;
 
+void    builtin(t_lst *temp, char **env);
 
 int     ft_strlen(char *str)
 {
@@ -59,12 +61,12 @@ t_lst    *parse_error(char **argv)
     head->arg = malloc(sizeof(char *) *  1000);
     head->cmd = ft_strdup(argv[i++]);
     head->arg[0] = head->cmd;
-    if (strcmp(argv[i], ";") == 0)
+    if (argv[i] && strcmp(argv[i], ";") == 0)
     {
         head->meta = ';';
         i++;
     }
-    else if (strcmp(argv[i], "|") == 0)
+    else if (argv[i] && strcmp(argv[i], "|") == 0)
     {
         head->meta = '|';
         i++;
@@ -78,21 +80,24 @@ t_lst    *parse_error(char **argv)
             head->arg[j++] = ft_strdup(argv[i++]);
         }
     }
-    if (strcmp(argv[i], ";") == 0)
+    if (argv[i] && strcmp(argv[i], ";") == 0)
     {
         head->meta = ';';
         i++;
     }
-    else if (strcmp(argv[i], "|") == 0)
+    else if (argv[i] && strcmp(argv[i], "|") == 0)
     {
         head->meta = '|';
         i++;
     }
     temp = head;
-    temp->next = malloc(sizeof(t_lst));
-    temp->next = init_lst(temp->next);
-    temp->next->arg = malloc(sizeof(char *) * 100);
-    temp = temp->next;
+    if (argv[i])
+    {
+        temp->next = malloc(sizeof(t_lst));
+        temp->next = init_lst(temp->next);
+        temp->next->arg = malloc(sizeof(char *) * 100);
+        temp = temp->next;
+    }
     while (argv[i])
     {
         if (check != 1)
@@ -173,21 +178,49 @@ void    cd(char **str)
         print_error("error: cd: cannot change directory to ", str[1]);
     }
 }
-
-void    execute_lst(t_lst *lst, char **env)
+t_lst    *piping(t_lst *temp, char **env)
 {
-    t_lst   *temp;
     pid_t   pid;
     int     status;
-    temp = lst;
-    while (temp != NULL)
+    int in = 1;
+
+    pipe(temp->fd);
+    pid = fork();
+    if (pid < 0)
+        exit(EXIT_FAILURE);
+    else if (pid == 0)
     {
-        if (strcmp("cd", temp->cmd) == 0)
+        close(temp->fd[0]);
+        if (in != 0)
+        {
+            dup2(in, 0);
+           close(in);
+        }
+        if (temp->fd[1] != 1)
+        {
+            dup2(temp->fd[1], 1);
+            close(temp->fd[0]);
+        }
+        builtin(temp, env);
+    }
+    else
+        waitpid(pid, &status, WUNTRACED);
+    close(temp->fd[1]);
+    close(temp->fd[0]);
+}
+
+void    builtin(t_lst *temp, char **env)
+{
+    int status;
+    pid_t   pid;
+
+    if (temp->cmd && strcmp("cd", temp->cmd) == 0)
         {
             cd(temp->arg);
             temp = temp->next;
-            continue ;
+            return ;
         }
+        // printf("Bef\n");
         pid = fork();
         if (pid < 0)
             exit(EXIT_FAILURE);
@@ -202,18 +235,30 @@ void    execute_lst(t_lst *lst, char **env)
         {
             waitpid(pid, &status, WUNTRACED);
         }
+}
+void    execute_lst(t_lst *lst, char **env)
+{
+    t_lst   *temp;
+    pid_t   pid;
+    temp = lst;
+    while (temp != NULL)
+    {
+        if (temp->meta != '|')
+            builtin(temp, env);
+        else
+            temp = piping(temp, env);
         temp = temp->next;
     }
 }
 
 int main(int argc, char **argv, char **env)
-//int main()
+// int main()
 {
     t_lst    *lst;
 
     // int     argc = 7;
-    // char    *argv[10];
-    // argv[1] = "/bin/echo";
+    // char    *argv[3];
+    // argv[1] = "/usr/bin/ls";
     // argv[2] = "hello";
     // argv[3] = "yes";
     // argv[4] = ";";
@@ -223,7 +268,7 @@ int main(int argc, char **argv, char **env)
     // argv[8] = "/bin/ls";
     // argv[4] = "usr/bin/grep";
     // argv[5] = "microshell";
-    //argv[9] = NULL;
+    // argv[2] = NULL;
 
 
     if (argc == 1)
