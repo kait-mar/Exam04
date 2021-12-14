@@ -1,4 +1,20 @@
-#include "microshell.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <string.h>
+
+
+typedef struct lst
+{
+    char    *cmd;
+    char    **arg;
+    char    meta;
+    struct lst   *next;
+    int         fd[2];
+}   t_lst;
+
+void    builtin(t_lst *temp, char **env);
 
 int     ft_strlen(char *str)
 {
@@ -181,48 +197,40 @@ t_lst   *pipe_core(t_lst *temp, char **env)
     int     status;
     t_lst   *lst;
 
-    temp = temp->next;
-    while (lst && temp && temp->meta == '|')
+    pid = fork(); //second fork
+    if (pid < 0)
+        exit(EXIT_FAILURE);
+    else if (pid == 0)
     {
-        pipe(fd);
-        
-        pid = fork(); //second fork
-        if (pid < 0)
-            exit(EXIT_FAILURE);
-        else if (pid == 0)
+        while (lst && temp && temp->meta == '|')
         {
             lst = temp;
-            // temp = temp->next; //maybe
-            //close(fd[1]); //fd[1] = lst->fd[1]
-            dup2(fd[0], 0);
-            //close(fd[0]);
+            close(lst->fd[1]);
+            dup2(lst->fd[0], 0);
+            close(lst->fd[0]);
             /**************/
-            //close(temp->fd[0]);
-            dup2(fd[1], 1); //fd[1] = temp->fd[1] ..
-            //close(fd[1]);
+            close(lst->next->fd[0]);
+            dup2(lst->next->fd[1], 1);
+            close(lst->next->fd[1]);
             builtin(temp, env);
+            temp = temp->next;
         }
-        else
-        {
-            waitpid(pid, &status, WUNTRACED);
-        }
-        temp = temp->next;
     }
-
+    else
+    {
+        waitpid(pid, &status, WUNTRACED);
+    }
     return (temp);
 }
 
-t_lst    *piping(t_lst *temp, char **env)
+/*t_lst    *piping(t_lst *temp, char **env)
 {
     pid_t   pid;
     int     status;
     int in = 1;
     t_lst   *lst = temp;
-    t_lst   *back = temp;
-    int old_save = dup(STDIN_FILENO);
 
-    //pipe_loop(temp);
-    pipe(fd);
+    pipe(lst->fd);
     pid = fork(); //first fork
     if (pid < 0)
         exit(EXIT_FAILURE);
@@ -238,35 +246,68 @@ t_lst    *piping(t_lst *temp, char **env)
     {
         waitpid(pid, &status, WUNTRACED);
     }
-    //close(lst->fd[1]);
+    close(lst->fd[1]);
+    temp = temp->next;
+    pid = fork(); //second fork
+    if (pid < 0)
+        exit(EXIT_FAILURE);
+    else if (pid == 0)
+    {
+        close(lst->fd[1]);
+        dup2(lst->fd[0], 0);
+        close(lst->fd[0]);
+        builtin(temp, env);
+    }
+    else
+    {
+        waitpid(pid, &status, WUNTRACED);
+    }
+    close(lst->fd[0]);
+    close(lst->fd[1]);
+    return (temp);
+}*/
+
+t_lst    *piping(t_lst *temp, char **env)
+{
+    pid_t   pid;
+    int     status;
+    int in = 1;
+    t_lst   *lst = temp;
+
+    pipe_loop(temp);
+    pid = fork(); //first fork
+    if (pid < 0)
+        exit(EXIT_FAILURE);
+    else if (pid == 0)
+    {
+        close(lst->fd[0]);
+        dup2(lst->fd[1], 1);
+        close(lst->fd[1]);
+        builtin(temp, env);
+        exit(EXIT_SUCCESS); //here
+    }
+    else
+    {
+        waitpid(pid, &status, WUNTRACED);
+    }
+    close(lst->fd[1]);
 
     temp = pipe_core(temp, env);
 
-    // temp = temp->next;
-    // temp = temp->next;
+    temp = temp->next;
 
 
-    // close(lst->next->fd[1]);
-    // dup2(lst->next->fd[0], 0);
-    // close(lst->next->fd[0]);
-    close(fd[1]);
-    dup2(fd[0], 0);
-    close(fd[0]);
+
+    temp = temp->next;
+    close(lst->next->fd[1]);
+    dup2(lst->next->fd[0], 0);
+    close(lst->next->fd[0]);
     builtin(temp, env);
-    //close_all(back);
-    dup2(old_save, 0);
-    close(0);
+    close(lst->fd[0]);
+    close(lst->fd[1]);
+    close(lst->next->fd[0]);
+    close(lst->next->fd[1]);
     return (temp);
-}
-
-void    close_all(t_lst *lst)
-{
-    while (lst && lst->meta == '|')
-    {
-        close(lst->fd[0]);
-        close(lst->fd[1]);
-        lst = lst->next;
-    }
 }
 
 void    builtin(t_lst *temp, char **env)
