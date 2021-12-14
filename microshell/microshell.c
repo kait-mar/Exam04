@@ -178,6 +178,7 @@ void    cd(char **str)
         print_error("error: cd: cannot change directory to ", str[1]);
     }
 }
+
 t_lst    *piping(t_lst *temp, char **env)
 {
     pid_t   pid;
@@ -190,23 +191,26 @@ t_lst    *piping(t_lst *temp, char **env)
         exit(EXIT_FAILURE);
     else if (pid == 0)
     {
-        close(temp->fd[0]);
+        //close(temp->fd[0]);
         if (in != 0)
         {
             dup2(in, 0);
-           close(in);
+           //close(in);
         }
         if (temp->fd[1] != 1)
         {
             dup2(temp->fd[1], 1);
-            close(temp->fd[0]);
+            //close(temp->fd[0]);
         }
         builtin(temp, env);
     }
     else
+    {
         waitpid(pid, &status, WUNTRACED);
-    close(temp->fd[1]);
-    close(temp->fd[0]);
+        close(temp->fd[1]);
+        close(temp->fd[0]);
+    }
+    return (temp);
 }
 
 void    builtin(t_lst *temp, char **env)
@@ -236,6 +240,7 @@ void    builtin(t_lst *temp, char **env)
             waitpid(pid, &status, WUNTRACED);
         }
 }
+
 void    execute_lst(t_lst *lst, char **env)
 {
     t_lst   *temp;
@@ -244,10 +249,12 @@ void    execute_lst(t_lst *lst, char **env)
     while (temp != NULL)
     {
         if (temp->meta != '|')
+        {
             builtin(temp, env);
+            temp = temp->next;
+        }
         else
             temp = piping(temp, env);
-        temp = temp->next;
     }
 }
 
