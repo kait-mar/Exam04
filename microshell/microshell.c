@@ -184,7 +184,7 @@ t_lst   *pipe_core(t_lst *temp, char **env)
     temp = temp->next;
     while (lst && temp && temp->meta == '|')
     {
-        pipe(fd);
+        //pipe(fd);
         
         pid = fork(); //second fork
         if (pid < 0)
@@ -192,21 +192,23 @@ t_lst   *pipe_core(t_lst *temp, char **env)
         else if (pid == 0)
         {
             lst = temp;
-            // temp = temp->next; //maybe
+            temp = temp->next; //maybe
             //close(fd[1]); //fd[1] = lst->fd[1]
-            dup2(fd[0], 0);
+            dup2(lst->fd[0], 0);
             //close(fd[0]);
             /**************/
             //close(temp->fd[0]);
-            dup2(fd[1], 1); //fd[1] = temp->fd[1] ..
+            dup2(temp->fd[1], 1); //fd[1] = temp->fd[1] ..
             //close(fd[1]);
             builtin(temp, env);
         }
         else
         {
             waitpid(pid, &status, WUNTRACED);
+            close(lst->fd[0]);
+            close(temp->fd[1]);
         }
-        temp = temp->next;
+        //temp = temp->next;
     }
 
     return (temp);
