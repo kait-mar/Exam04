@@ -74,6 +74,7 @@ t_lst    *parse_error(char **argv)
         head->meta = '|';
         i++;
     }
+    head->previous = NULL;
     temp = head;
     if (argv[i])
     {
@@ -81,6 +82,7 @@ t_lst    *parse_error(char **argv)
         temp->next = init_lst(temp->next);
         temp->next->arg = malloc(sizeof(char *) * 100);
         temp = temp->next;
+        temp->previous = head;
     }
     while (argv[i])
     {
@@ -96,6 +98,7 @@ t_lst    *parse_error(char **argv)
             temp->next = malloc(sizeof(t_lst));
             temp->next = init_lst(temp->next);
             temp->next->arg = malloc(sizeof(char *) *  1000);
+            temp->next->previous = temp;
             temp = temp->next;
             i++;
         }
@@ -106,6 +109,7 @@ t_lst    *parse_error(char **argv)
             temp->next = malloc(sizeof(t_lst));
             temp->next = init_lst(temp->next);
             temp->next->arg = malloc(sizeof(char *) *  1000);
+            temp->next->previous = temp;
             temp = temp->next;
             i++;
         }
@@ -169,96 +173,11 @@ t_lst   *pipe_loop(t_lst *lst)
 
     while (temp && temp->meta == '|')
     {
-        pipe(temp->fd);
+        if (pipe(temp->fd) < 0)
+            printf("error in pipe\n");
         temp = temp->next;
     }
     return (lst);
-}
-
-t_lst   *pipe_core(t_lst *temp, char **env)
-{
-    pid_t   pid;
-    int     status;
-    t_lst   *lst;
-
-    temp = temp->next;
-    while (lst && temp && temp->meta == '|')
-    {
-        //pipe(fd);
-        
-        pid = fork(); //second fork
-        if (pid < 0)
-            exit(EXIT_FAILURE);
-        else if (pid == 0)
-        {
-            lst = temp;
-            temp = temp->next; //maybe
-            //close(fd[1]); //fd[1] = lst->fd[1]
-            dup2(lst->fd[0], 0);
-            //close(fd[0]);
-            /**************/
-            //close(temp->fd[0]);
-            dup2(temp->fd[1], 1); //fd[1] = temp->fd[1] ..
-            //close(fd[1]);
-            builtin(temp, env);
-        }
-        else
-        {
-            waitpid(pid, &status, WUNTRACED);
-            close(lst->fd[0]);
-            close(temp->fd[1]);
-        }
-        //temp = temp->next;
-    }
-
-    return (temp);
-}
-
-t_lst    *piping(t_lst *temp, char **env)
-{
-    pid_t   pid;
-    int     status;
-    int in = 1;
-    t_lst   *lst = temp;
-    t_lst   *back = temp;
-    int old_save = dup(STDIN_FILENO);
-
-    //pipe_loop(temp);
-    pipe(fd);
-    pid = fork(); //first fork
-    if (pid < 0)
-        exit(EXIT_FAILURE);
-    else if (pid == 0)
-    {
-        close(lst->fd[0]);
-        dup2(lst->fd[1], 1);
-        close(lst->fd[1]);
-        builtin(temp, env);
-        exit(EXIT_SUCCESS); //here
-    }
-    else
-    {
-        waitpid(pid, &status, WUNTRACED);
-    }
-    //close(lst->fd[1]);
-
-    temp = pipe_core(temp, env);
-
-    // temp = temp->next;
-    // temp = temp->next;
-
-
-    // close(lst->next->fd[1]);
-    // dup2(lst->next->fd[0], 0);
-    // close(lst->next->fd[0]);
-    close(fd[1]);
-    dup2(fd[0], 0);
-    close(fd[0]);
-    builtin(temp, env);
-    //close_all(back);
-    dup2(old_save, 0);
-    close(0);
-    return (temp);
 }
 
 void    close_all(t_lst *lst)
@@ -298,6 +217,118 @@ void    builtin(t_lst *temp, char **env)
         }
 }
 
+t_lst   *pipe_core(t_lst *temp, char **env)
+{
+    pid_t   pid;
+    int     status;
+    t_lst   *lst;
+
+    temp = temp->next;
+    while (lst && temp && temp->meta == '|')
+    {
+        //pipe(fd);
+        
+        pid = fork(); //second fork
+        if (pid < 0)
+            exit(EXIT_FAILURE);
+        else if (pid == 0)
+        {
+            lst = temp;
+            temp = temp->next; //maybe
+            //close(fd[1]); //fd[1] = lst->fd[1]
+            dup2(lst->fd[0], 0);
+            //close(fd[0]);
+            /**************/
+            //close(temp->fd[0]);
+            dup2(temp->fd[1], 1); //fd[1] = temp->fd[1] ..
+            //close(fd[1]);
+            builtin(temp, env);
+        }
+        else
+        {
+            waitpid(pid, &status, WUNTRACED);
+            close(lst->fd[0]);
+            close(temp->fd[1]);
+        }
+        //temp = temp->next;
+    }
+    return (temp);
+}
+
+
+t_lst    *piping(t_lst *temp, char **env)
+{
+    pid_t   pid;
+    int     open = 0;
+    int     status;
+
+    // fprintf(stderr, "pipe from %s\n", temp->cmd);
+    pipe_loop(temp);
+    int save = dup(STDIN_FILENO);
+    while (temp)
+    {
+        // if (temp->meta == '|')
+        //     pipe(temp->fd);
+        //fprintf(stderr, "in %s\n", temp->cmd);
+        if (temp->meta == '|' || (temp->previous && temp->previous->meta == '|'))
+        {
+            open = 1;
+            //pipe(temp->fd);
+        }
+        pid = fork();
+        if (pid < 0)
+            exit(EXIT_FAILURE);
+        if (pid == 0)
+        {
+            if (temp->meta == '|')
+            {
+                //close(temp->fd[0]); //check it
+                if (temp->fd[1] != 1 && dup2(temp->fd[1], 1) < 0)
+                    fprintf(stderr, "error in dup fd[1] [%s]\n", temp->cmd);
+                close(temp->fd[1]); //check it later
+            }
+            if (temp->previous && temp->previous->meta == '|')
+            {
+                if (temp->previous->fd[0] != 0 && dup2(temp->previous->fd[0], 0) < 0)
+                    fprintf(stderr, "error in dup fd[] [%s]\n", temp->cmd);
+                close(temp->previous->fd[0]);
+            }
+            builtin(temp, env);
+            exit(EXIT_SUCCESS);
+        }
+        else
+        {
+            waitpid(pid, &status, 0);
+            if (open == 1)
+            {
+                //fprintf(stderr, "cmd=> %s fd = %d\n", temp->cmd, temp->fd[1]);
+                close(temp->fd[1]);
+                // if (temp->next && temp->next->meta != '|' /*get sure if == ':'*/)
+                // {
+                //     close(temp->fd[0]);
+                // }
+                if (temp->meta != '|')
+                {
+                    close(temp->previous->fd[0]);
+                    //fprintf(stderr, "cmd previous=> %s fd = %d\n", temp->previous->cmd, temp->previous->fd[0]);
+                }
+            }
+            if (temp->previous && temp->previous->meta == '|')
+                close(temp->previous->fd[0]);
+        }
+        temp = temp->next;
+        if (temp && temp->previous && temp->previous->meta != '|')
+        {
+            // fprintf(stderr, "breaked with %s\n", temp->cmd);
+            //close(temp->previous->fd[0]);
+            break ;
+        }
+    }
+    dup2(save, 0);
+    return (temp);
+}
+
+
 void    execute_lst(t_lst *lst, char **env)
 {
     t_lst   *temp;
@@ -308,10 +339,12 @@ void    execute_lst(t_lst *lst, char **env)
         if (temp->meta != '|')
         {
             builtin(temp, env);
+            temp = temp->next;
         }
         else
             temp = piping(temp, env);
-        temp = temp->next;
+        //temp = temp->next;
+        //fprintf(stderr, "********breaked with %s\n", temp->cmd);
     }
 }
 
@@ -342,6 +375,7 @@ int main(int argc, char **argv, char **env)
     // print_lst(lst);
     // printf("**************\n");
     execute_lst(lst, env);
+    while (1);
     return (0);
 }
 

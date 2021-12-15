@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <errno.h>
 
 
 typedef struct lst
@@ -14,6 +15,7 @@ typedef struct lst
     char    **arg;
     char    meta;
     struct lst   *next;
+    struct lst     *previous;
     int         fd[2];
 }   t_lst;
 
