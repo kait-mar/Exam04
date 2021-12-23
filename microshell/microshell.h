@@ -23,12 +23,12 @@ int     fd[2];
 
 void    builtin(t_lst *temp, char **env);
 char    *ft_strdup(char *str);
-t_lst   *init_lst(t_lst *lst);
+t_lst   *init_lst(t_lst *lst, int k);
 t_lst    *parse_error(char **argv);
 void    print_lst(t_lst *lst);
 void    print_error(char *s1, char *s2);
 void    cd(char **str);
-t_lst   *pipe_loop(t_lst *lst);
+void    pipe_loop(t_lst *lst);
 t_lst   *pipe_core(t_lst *temp, char **env);
 t_lst    *piping(t_lst *temp, char **env);
 void    close_all(t_lst *lst);

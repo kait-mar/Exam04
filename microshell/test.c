@@ -1,10 +1,9 @@
 #include "microshell.h"
 
-
-int ft_strlen(char *str)
+int     ft_strlen(char *s)
 {
     int i = 0;
-    while (str[i])
+    while (s[i])
         i++;
     return (i);
 }
@@ -18,45 +17,61 @@ void    print_error(char *s1, char *s2)
     write(2, "\n", 1);
 }
 
-t_lst    *pipe_loop(t_lst *lst)
+char    *ft_strdup(char *s)
 {
-    t_lst   *temp = lst;
+    int i = 0;
+    char    *str = malloc(ft_strlen(s) + 1);
 
-    while (temp && temp->meta == '|')
+    while (s[i])
     {
-        pipe(temp->fd);
-        temp = temp->next;
+        str[i] = s[i];
+        i++;
     }
+    str[i] = '\0';
+    return (str);
+}
+
+int till_meta(char **argv, int start)
+{
+    int i = 0;
+    while (argv[start] && strcmp(argv[start], ";") && strcmp(argv[start], "|"))
+    {
+        start++;
+        i++;
+    }
+    return (i + 1);
+}
+
+t_lst   *init_lst(t_lst *lst, int k)
+{
+    lst->arg[0] = NULL;
+    lst->cmd = NULL;
+    lst->meta = 0;
+    lst->next = NULL;
+    if (k > 1)
+        lst->arg[1] = NULL;
     return (lst);
 }
 
-char    *ft_strdup(char *str)
+void    pipe_loop(t_lst *lst)
 {
-    int i = 0;
-    char    *s;
-    s = malloc(ft_strlen(str));
-    while (str[i])
+    while (lst && lst->meta == '|')
     {
-        s[i] = str[i];
-        i++;
+        pipe(lst->fd);
+        lst = lst->next;
     }
-    s[i] = '\0';
-    return (s);
 }
 
 t_lst   *piping(t_lst *temp, char **env)
 {
-    int save = dup(STDIN_FILENO);
     pid_t   pid;
-    int status;
+    int save = dup(STDIN_FILENO);
 
     pipe_loop(temp);
     while (temp)
     {
         pid = fork();
-        if (pid < 0)
-            print_error("error\n", NULL);
-        else if (pid == 0)
+        if (pid == 0)
         {
             if (temp->meta == '|')
                 dup2(temp->fd[1], 1);
@@ -67,11 +82,11 @@ t_lst   *piping(t_lst *temp, char **env)
         }
         else
         {
-            waitpid(pid, &status, WUNTRACED);
+            waitpid(pid, NULL, WUNTRACED);
             if (temp->meta == '|')
                 close(temp->fd[1]);
             if (temp->previous && temp->previous->meta == '|')
-                close(temp->previous->fd[0]);
+                close (temp->previous->fd[0]);
             temp = temp->next;
             if (temp && temp->previous && temp->previous->meta != '|')
                 break ;
@@ -81,6 +96,22 @@ t_lst   *piping(t_lst *temp, char **env)
     return (temp);
 }
 
+void    execute_lst(t_lst *lst, char **env)
+{
+    while (lst)
+    {
+        if (lst->meta == '|')
+        {
+            lst = piping(lst, env);
+        }
+        else
+        {
+            builtin(lst, env);
+            lst = lst->next;
+        }
+    }
+}
+
 void    cd(char **str)
 {
     int i = 0;
@@ -88,114 +119,125 @@ void    cd(char **str)
         i++;
     if (i > 2)
     {
-        print_error("error in arg cd", NULL);
+        print_error("error: cd: bad arguments", NULL);
         return ;
     }
-    if (chdir(str[1]) < 0)
-        return ;
+    if (chdir(str[1]) == -1)
+        print_error("error: cd: cannot change directory to ", str[1]);
 }
 
 void    builtin(t_lst *temp, char **env)
 {
-    int status;
-    pid_t   pid;
-
+    if (temp->cmd == NULL)
+        return ;
     if (strcmp(temp->cmd, "cd") == 0)
     {
         cd(temp->arg);
         return ;
     }
-    pid = fork();
+    pid_t  pid = fork();
     if (pid == 0)
     {
         if (execve(temp->cmd, temp->arg, env) == -1)
         {
-            print_error("error in execve", NULL);
+            print_error("error: cannot execute ", temp->cmd);
             exit(EXIT_FAILURE);
         }
     }
     else
-        waitpid(pid, &status, WUNTRACED);
+        waitpid(pid, NULL, WUNTRACED);
 }
 
 t_lst   *parse_error(char **argv)
 {
+    int i = 1;
+    int check = 0;
+    int k = 0;
     t_lst   *head;
     t_lst   *temp;
-    int check = 0;
+    int j;
 
     head = malloc(sizeof(t_lst));
-    head->arg = malloc(sizeof(char *) * 100);
-    head = init_lst(head);
-    int i = 1;
-    head->cmd = ft_strdup(argv[i++]);
-    head->arg[0] = head->cmd;
+    k = till_meta(argv, i);
+    head->arg = malloc(sizeof(char *) * k);
+    head = init_lst(head, k);
+    if (argv[i] && strcmp(argv[i], ";"))
+    {
+        head->cmd = ft_strdup(argv[i++]);
+        head->arg[0] = head->cmd;
+    }
     if (argv[i] && strcmp(argv[i], ";") == 0)
     {
-        head->meta = ';';
         i++;
+        head->meta = ';';
     }
     else if (argv[i] && strcmp(argv[i], "|") == 0)
     {
-        head->meta = '|';
         i++;
+        head->meta = '|';
     }
     else
     {
-        int j = 1;
+        j = 1;
         while (argv[i] && strcmp(argv[i], ";") && strcmp(argv[i], "|"))
         {
-            head->arg[j++] = ft_strdup(argv[i++]);
+            head->arg[j++] = argv[i++];
         }
         head->arg[j] = NULL;
+         if (argv[i] && strcmp(argv[i], ";") == 0)
+        {
+            i++;
+            head->meta = ';';
+        }
+        else if (argv[i] && strcmp(argv[i], "|") == 0)
+        {
+            i++;
+            head->meta = '|';
+        }
     }
-    if (argv[i] && strcmp(argv[i], ";") == 0)
-    {
-        head->meta = ';';
-        i++;
-    }
-    else if (argv[i] && strcmp(argv[i], "|") == 0)
-    {
-        head->meta = '|';
-        i++;
-    }
-    head->next = malloc(sizeof(t_lst));
-    head->next->arg = malloc(sizeof(char*) * 100);
-    temp = head->next;
-    temp = init_lst(temp);
+    temp = malloc(sizeof(t_lst));
+    k = till_meta(argv, i);
+    temp->arg = malloc(sizeof(char *) * k);
+    temp = init_lst(temp, k);
     head->previous = NULL;
     temp->previous = head;
+    head->next = temp;
     while (argv[i])
     {
-        if (check != 1)
+        if (check != 1 && strcmp(argv[i], ";"))
         {
+
             temp->cmd = ft_strdup(argv[i++]);
             temp->arg[0] = temp->cmd;
         }
         if (argv[i] && strcmp(argv[i], ";") == 0)
         {
-            check = 0;
             temp->meta = ';';
-            temp->next = malloc(sizeof(t_lst));
-            temp->next->arg = malloc(sizeof(char*) * 100);
+            i++;
+            check = 0;
+            k = till_meta(argv, i);
+            temp->next = malloc(sizeof(t_lst) * k);
+            temp->next->arg = malloc(sizeof(char *) * k);
             temp->next->previous = temp;
             temp = temp->next;
-            i++;
+            temp = init_lst(temp, k);
         }
         else if (argv[i] && strcmp(argv[i], "|") == 0)
         {
-            check = 0;
             temp->meta = '|';
-            temp->next = malloc(sizeof(t_lst));
-            temp->next->arg = malloc(sizeof(char*) * 100);
+            i++;
+            check = 0;
+            k = till_meta(argv, i);
+            temp->next = malloc(sizeof(t_lst) * k);
+            temp->next->arg = malloc(sizeof(char *) * k);
             temp->next->previous = temp;
             temp = temp->next;
-            i++;
+            temp = init_lst(temp, k);
         }
         else
         {
             check = 1;
-            int j = 1;
+            j = 1;
             while (argv[i] && strcmp(argv[i], ";") && strcmp(argv[i], "|"))
             {
                 temp->arg[j++] = ft_strdup(argv[i++]);
@@ -203,30 +245,7 @@ t_lst   *parse_error(char **argv)
             temp->arg[j] = NULL;
         }
     }
-    temp->next = NULL;
     return (head);
-}
-
-t_lst   *init_lst(t_lst *temp)
-{
-    temp->meta = 0;
-    temp->cmd  = NULL;
-    temp->next = NULL;
-    return (temp);
-}
-
-void    execute_lst(t_lst *lst, char **env)
-{
-    while (lst)
-    {
-        if (lst->meta == '|')
-            lst = piping(lst, env);
-        else
-        {
-            builtin(lst, env);
-            lst = lst->next;
-        }
-    }
 }
 
 void    print_lst(t_lst *lst)
@@ -236,7 +255,7 @@ void    print_lst(t_lst *lst)
     {
         int i = 0;
         printf("cmd ==> %s\n", temp->cmd);
-        while (temp->arg[i])
+        while (temp->arg[i] != NULL)
             printf("%s ", temp->arg[i++]);
         if (temp->previous)
             printf("\npprevious %s\n", temp->previous->cmd);

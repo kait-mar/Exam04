@@ -1,14 +1,3 @@
-backup.c
-first_microshell.c
-fout.res
-microshell
-microshell.c
-microshell.h
-out.res
-subject.txt
-test
-test.sh
-
 #include "microshell.h"
 
 int     ft_strlen(char *str)
@@ -200,7 +189,13 @@ void    builtin(t_lst *temp, char **env)
             cd(temp->arg);
             temp = temp->next;
             return ;
+
         }
+    if (temp->cmd && strcmp(";", temp->cmd) == 0)
+    {
+        print_error("error bash", NULL);
+        return ;
+    }
         pid = fork();
         if (pid < 0)
         {
@@ -392,91 +387,3 @@ inside while !!
     }
 
 */
-microshell.c
-
-
-
-
-OK
-
-OK
-
-OK
-
-OK
-OK
-
-first_microshell.c
-microshell
-microshell.c
-microshell.h
-
-first_microshell.c
-microshell
-microshell.c
-microshell.h
-
-
-
-dernier
-
-
-     1	first_microshell.c
-     2	microshell
-     3	microshell.c
-     4	microshell.h
-dernier
-ftest
-first_microshell.c
-microshell
-microshell.c
-microshell.h
-
-ftest
-ftewerwerwerst
-werwerwer
-qweqweqweqew
-qwewqeqrtregrfyukui
-
-backup.c
-first_microshell.c
-fout.res
-microshell
-microshell.c
-microshell.h
-out.res
-subject.txt
-test
-test.sh
-microshell.c
-
-first_microshell.c
-microshell
-microshell.c
-microshell.h
-first_microshell.c
-microshell
-microshell.c
-microshell.h
-first_microshell.c
-microshell
-microshell.c
-microshell.h
-first_microshell.c
-microshell
-microshell.c
-microshell.h
-first_microshell.c
-microshell
-microshell.c
-microshell.h
-
-
-
-
-
-
-OK
-
-OK
-
